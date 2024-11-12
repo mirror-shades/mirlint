@@ -4200,10 +4200,12 @@ def CheckBracesSpacing(filename, clean_lines, linenum, nesting_state, error):
     # We also suppress warnings for `uint64_t{expression}` etc., as the style
     # guide recommends brace initialization for integral types to avoid
     # overflow/truncation.
-    if (not re.match(r'^[\s}]*[{.;,)<>\]:]', trailing_text)
-        and not _IsType(clean_lines, nesting_state, leading_text)):
-      error(filename, linenum, 'whitespace/braces', 5,
-            'Missing space before {')
+
+    # changed for mirlint fork, not needed with new brace style
+    # if (not re.match(r'^[\s}]*[{.;,)<>\]:]', trailing_text)
+    #     and not _IsType(clean_lines, nesting_state, leading_text)):
+    #   error(filename, linenum, 'whitespace/braces', 5,
+    #         'Missing space before {')
 
   # Make sure '} else {' has spaces.
   if re.search(r'}else', line):
@@ -4334,29 +4336,26 @@ def CheckBraces(filename, clean_lines, linenum, error):
 
   line = clean_lines.elided[linenum]        # get rid of comments and strings
 
+  # For mirlint: We enforce braces always being on a new line
+  # This is a departure from Google's style guide which prefers braces at the end of the line
   if re.match(r'\s*{\s*$', line):
-    # We allow an open brace to start a line in the case where someone is using
-    # braces in a block to explicitly create a new scope, which is commonly used
-    # to control the lifetime of stack-allocated variables.  Braces are also
-    # used for brace initializers inside function calls.  We don't detect this
-    # perfectly: we just don't complain if the last non-whitespace character on
-    # the previous non-blank line is ',', ';', ':', '(', '{', or '}', or if the
-    # previous line starts a preprocessor block. We also allow a brace on the
-    # following line if it is part of an array initialization and would not fit
-    # within the 80 character limit of the preceding line.
     prevline = GetPreviousNonBlankLine(clean_lines, linenum)[0]
-    if (not re.search(r'[,;:}{(]\s*$', prevline) and
-        not re.match(r'\s*#', prevline) and
-        not (GetLineWidth(prevline) > _line_length - 2 and '[]' in prevline)):
+    # We want braces on a new line after ) for function definitions and control statements
+    if re.search(r'\)\s*$', prevline):
+      pass  # This is correct - brace on new line after )
+  else:
+    # Check if there's a brace at the end of the line
+    if re.search(r'\)\s*{\s*$', line):
       error(filename, linenum, 'whitespace/braces', 4,
-            '{ should almost always be at the end of the previous line')
+            'Opening brace should be on a new line after function definitions and control statements')
 
-  # An else clause should be on the same line as the preceding closing brace.
+  # changed for mirlint fork
+  # An else clause should be on a new line after the preceding closing brace.
   if last_wrong := re.match(r'\s*else\b\s*(?:if\b|\{|$)', line):
     prevline = GetPreviousNonBlankLine(clean_lines, linenum)[0]
-    if re.match(r'\s*}\s*$', prevline):
-      error(filename, linenum, 'whitespace/newline', 4,
-            'An else should appear on the same line as the preceding }')
+    if re.match(r'\s*}\s*else', prevline):
+      error(filename, linenum - 1, 'whitespace/newline', 4,
+            'An else should appear on a new line after the preceding }')
     else:
       last_wrong = False
 
@@ -5175,12 +5174,15 @@ def CheckIncludeLine(filename, clean_lines, linenum, include_state, error):
   #
   # We also make an exception for Lua headers, which follow google
   # naming convention but not the include convention.
-  match = re.match(r'#include\s*"([^/]+\.(.*))"', line)
-  if match:
-    if (IsHeaderExtension(match.group(2)) and
-        not _THIRD_PARTY_HEADERS_PATTERN.match(match.group(1))):
-      error(filename, linenum, 'build/include_subdir', 4,
-            'Include the directory when naming header files')
+
+  # Changed for the mirlint fork
+  # this is not needed for cmake files so this will be ignored
+  # match = re.match(r'#include\s*"([^/]+\.(.*))"', line)
+  # if match:
+  #   if (IsHeaderExtension(match.group(2)) and
+  #       not _THIRD_PARTY_HEADERS_PATTERN.match(match.group(1))):
+  #     error(filename, linenum, 'build/include_subdir', 4,
+  #           'Include the directory when naming header files')
 
   # we shouldn't include a file more than once. actually, there are a
   # handful of instances where doing so is okay, but in general it's
@@ -6473,18 +6475,20 @@ def FlagCxxHeaders(filename, clean_lines, linenum, error):
 
   include = re.match(r'\s*#\s*include\s+[<"]([^<"]+)[">]', line)
 
-  # Flag unapproved C++11 headers.
-  if include and include.group(1) in ('cfenv',
-                                      'fenv.h',
-                                      'ratio',
-                                     ):
-    error(filename, linenum, 'build/c++11', 5,
-          f"<{include.group(1)}> is an unapproved C++11 header.")
-
-  # filesystem is the only unapproved C++17 header
-  if include and include.group(1) == 'filesystem':
-    error(filename, linenum, 'build/c++17', 5,
-          "<filesystem> is an unapproved C++17 header.")
+  #changed for mirlint fork
+  # Flag unapproved C++20 headers
+  if include and include.group(1) in ('barrier',
+                                    'format',
+                                    'latch',
+                                    'numbers',
+                                    'ranges',
+                                    'semaphore',
+                                    'source_location',
+                                    'span',
+                                    'stop_token',
+                                    'syncstream'):
+    error(filename, linenum, 'build/c++20', 5,
+          f"<{include.group(1)}> is an unapproved C++20 header.")
 
 
 def ProcessFileData(filename, file_extension, lines, error,
